@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 翻轉書本卡片</title>
+    <style>
+        :root {
+            --card-width: 260px;
+            --card-height: 380px;
+            --primary-shadow: 0 15px 35px rgba(0, 0, 0, 0.25), 0 5px 15px rgba(0, 0, 0, 0.2);
+            --text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #e0eafc, #cfdef3);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* 外層容器 */
+        .slider-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            height: 550px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            perspective: 1000px; /* 3D 視角 */
+        }
+
+        /* 卡片包裝盒（含書名） */
+        .card-wrapper {
+            position: absolute;
+            width: var(--card-width);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: transform 0.5s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.5s, z-index 0s;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(100%) scale(0.8) rotateY(-30deg);
+        }
+
+        /* 多卡片狀態控制 */
+        .card-wrapper.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateX(0) scale(1) rotateY(0deg);
+            z-index: 10;
+        }
+
+        .card-wrapper.prev {
+            opacity: 0.4;
+            pointer-events: auto;
+            transform: translateX(-120%) scale(0.8) rotateY(30deg);
+            z-index: 5;
+            cursor: pointer;
+        }
+
+        .card-wrapper.next {
+            opacity: 0.4;
+            pointer-events: auto;
+            transform: translateX(120%) scale(0.8) rotateY(-30deg);
+            z-index: 5;
+            cursor: pointer;
+        }
+
+        /* 3D 卡片主體 */
+        .card-inner {
+            width: var(--card-width);
+            height: var(--card-height);
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 15px;
+            box-shadow: var(--primary-shadow);
+        }
+
+        /* 點擊翻面效果 */
+        .card-wrapper.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        /* 正反面通用樣式 */
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden; /* 隱藏背面 */
+            border-radius: 15px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+        }
+
+        /* 正面：書籍封面 */
+        .card-front {
+            background: linear-gradient(45deg, #2c3e50, #3498db);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .card-front .cover-placeholder {
+            font-size: 1.2rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* 背面：輸入文字 */
+        .card-back {
+            background: #ffffff;
+            color: #333;
+            transform: rotateY(180deg);
+            padding: 20px;
+            border: 1px solid #ddd;
+        }
+
+        .card-back textarea {
+            width: 100%;
+            height: 100%;
+            border: none;
+            resize: none;
+            font-size: 1rem;
+            line-height: 1.5;
+            color: #444;
+            outline: none;
+            background: transparent;
+            font-family: inherit;
+        }
+
+        /* 下方書名模塊 */
+        .book-title-container {
+            margin-top: 25px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .book-title-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid #555;
+            color: #222;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-align: center;
+            padding: 5px 0;
+            outline: none;
+            text-shadow: var(--text-shadow);
+            transition: border-color 0.3s;
+        }
+
+        .book-title-input:focus {
+            border-bottom-color: #3498db;
+        }
+
+        /* 翻轉與導覽按鈕提示 */
+        .action-hint {
+            position: absolute;
+            bottom: -35px;
+            font-size: 0.85rem;
+            color: #666;
+            background: rgba(255,255,255,0.6);
+            padding: 2px 10px;
+            border-radius: 10px;
+            pointer-events: none;
+        }
+
+        /* 新增按鈕 (+) */
+        .add-btn {
+            margin-top: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: #2ecc71;
+            color: white;
+            font-size: 2rem;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 8px 20px rgba(46, 204, 113, 0.4);
+            transition: transform 0.2s, background-color 0.2s;
+            z-index: 100;
+        }
+
+        .add-btn:hover {
+            transform: scale(1.1);
+            background-color: #27ae60;
+        }
+
+        .add-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* 左右切換箭頭（可點擊空白處或直接點隔壁卡片，這裡加上輔助箭頭） */
+        .nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.7);
+            border: none;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            font-size: 1.2rem;
+            cursor: pointer;
+            z-index: 90;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            transition: background 0.3s;
+        }
+        .nav-btn:hover { background: white; }
+        .prev-btn { left: 20px; }
+        .next-btn { right: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="slider-container" id="sliderContainer">
+        <button class="nav-btn prev-btn" onclick="moveSlide(-1)">❮</button>
+        <button class="nav-btn next-btn" onclick="moveSlide(1)">❯</button>
+    </div>
+
+    <button class="add-btn" id="addBtn" onclick="createNewCard()">+</button>
+
+    <script>
+        let cardsData = []; // 儲存卡片資料
+        let currentIndex = 0;
+        const sliderContainer = document.getElementById('sliderContainer');
+
+        // 初始化：預先建立第一張卡片
+        window.onload = function() {
+            createNewCard("我的第一本書", "在這裡輸入這本書的筆記或心得...");
+        };
+
+        // 建立新卡片
+        function createNewCard(title = "", content = "") {
+            const cardId = Date.now(); // 唯一ID
+            
+            // 建立 DOM 結構
+            const wrapper = document.createElement('div');
+            wrapper.className = 'card-wrapper';
+            wrapper.dataset.id = cardId;
+
+            wrapper.innerHTML = `
+                <div class="card-inner" onclick="flipCard(this, event)">
+                    <div class="card-front">
+                        <div class="cover-placeholder">📖<br><br>BOOK COVER</div>
+                    </div>
+                    <div class="card-back">
+                        <textarea placeholder="點擊輸入書籍備忘/內容..." onclick="event.stopPropagation()">${content}</textarea>
+                    </div>
+                </div>
+                <div class="book-title-container">
+                    <input type="text" class="book-title-input" placeholder="請輸入書名" value="${title}" onclick="event.stopPropagation()">
+                </div>
+                <div class="action-hint">點擊卡片翻面</div>
+            `;
+
+            // 將新卡片插入到箭頭按鈕之前
+            sliderContainer.insertBefore(wrapper, sliderContainer.querySelector('.prev-btn'));
+            
+            // 切換到最新建立的這張卡片
+            currentIndex = document.querySelectorAll('.card-wrapper').length - 1;
+            updateSlider();
+        }
+
+        // 更新滑動卡片的定位與顯示狀態
+        function updateSlider() {
+            const wrappers = document.querySelectorAll('.card-wrapper');
+            
+            wrappers.forEach((wrapper, index) => {
+                // 移除所有狀態標籤
+                wrapper.classList.remove('active', 'prev', 'next');
+                
+                // 移除翻轉狀態（切換時自動翻回正面）
+                wrapper.classList.remove('flipped');
+
+                // 移除原本的點擊事件避免重疊
+                wrapper.onclick = null;
+
+                if (index === currentIndex) {
+                    wrapper.classList.add('active');
+                } else if (index === currentIndex - 1) {
+                    wrapper.classList.add('prev');
+                    // 點擊左邊露出的一角可以切換過去
+                    wrapper.onclick = () => moveSlide(-1);
+                } else if (index === currentIndex + 1) {
+                    wrapper.classList.add('next');
+                    // 點擊右邊露出的一角可以切換過去
+                    wrapper.onclick = () => moveSlide(1);
+                }
+            });
+        }
+
+        // 左右切換控制 (n 為 1 或 -1)
+        function moveSlide(n) {
+            const wrappers = document.querySelectorAll('.card-wrapper');
+            if (wrappers.length === 0) return;
+
+            currentIndex += n;
+
+            // 循環邊界處理
+            if (currentIndex >= wrappers.length) {
+                currentIndex = 0;
+            } else if (currentIndex < 0) {
+                currentIndex = wrappers.length - 1;
+            }
+
+            updateSlider();
+        }
+
+        // 點擊卡片翻面 (排除內建文字輸入框與按鈕的點擊干擾)
+        function flipCard(innerElement, event) {
+            const wrapper = innerElement.closest('.card-wrapper');
+            // 只有當前主要卡片才可以翻面
+            if (wrapper.classList.contains('active')) {
+                wrapper.classList.toggle('flipped');
+            }
+        }
+    </script>
+</body>
+</html>
