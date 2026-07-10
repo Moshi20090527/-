@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 翻轉書本卡片（雙擊打字版）</title>
+    <title>3D 翻轉書本卡片（雙擊換圖與打字版）</title>
     <style>
         :root {
             --card-width: 260px;
@@ -105,9 +105,11 @@
             box-sizing: border-box;
         }
 
-        /* 正面：書籍封面 */
+        /* 正面：書籍封面（支援圖片填滿與底色） */
         .card-front {
             background: linear-gradient(45deg, #2c3e50, #3498db);
+            background-size: cover;
+            background-position: center;
             color: white;
             border: 2px solid rgba(255, 255, 255, 0.1);
         }
@@ -118,6 +120,22 @@
             letter-spacing: 2px;
             text-align: center;
             padding: 20px;
+            background: rgba(0, 0, 0, 0.4);
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+            text-shadow: var(--text-shadow);
+            transition: opacity 0.3s;
+        }
+
+        /* 當有設定自訂封面圖時，把原本的文字遮罩微調或隱藏（這邊設計成文字稍微變淡留存書本感，若要完全隱藏可改為 opacity: 0） */
+        .card-front.has-img .cover-placeholder {
+            background: rgba(0, 0, 0, 0.2);
+            font-size: 0; /* 隱藏原本的預設大文字 */
         }
 
         /* 背面：輸入文字 */
@@ -147,7 +165,6 @@
             outline: none;
             background: transparent;
             font-family: inherit;
-            /* 預設禁止指針事件，防止單擊時干擾翻面 */
             pointer-events: none; 
         }
 
@@ -192,7 +209,6 @@
             padding: 2px 10px;
             border-radius: 10px;
             pointer-events: none;
-            transition: opacity 0.3s;
         }
 
         /* 新增按鈕 (+) */
@@ -266,7 +282,7 @@
             wrapper.innerHTML = `
                 <div class="card-inner" id="inner-${cardId}">
                     <div class="card-front">
-                        <div class="cover-placeholder">📖<br><br>BOOK COVER</div>
+                        <div class="cover-placeholder">📖<br><br>雙擊更改封面照片</div>
                     </div>
                     <div class="card-back">
                         <textarea placeholder="請輸入書籍內容..." readonly>${content}</textarea>
@@ -275,23 +291,21 @@
                 <div class="book-title-container">
                     <input type="text" class="book-title-input" placeholder="請輸入書名" value="${title}" onclick="event.stopPropagation()">
                 </div>
-                <div class="action-hint" id="hint-${cardId}">單擊翻面 / 背面雙擊打字</div>
+                <div class="action-hint" id="hint-${cardId}">單擊翻面 / 正面雙擊換圖 / 背面雙擊打字</div>
             `;
 
             // 將新卡片插入到箭頭按鈕之前
             sliderContainer.insertBefore(wrapper, sliderContainer.querySelector('.prev-btn'));
             
-            // 綁定點擊與雙擊事件
             const cardInner = wrapper.querySelector('.card-inner');
+            const cardFront = wrapper.querySelector('.card-front');
             const textarea = wrapper.querySelector('textarea');
             const hint = wrapper.querySelector('.action-hint');
             let clickTimer = null;
 
+            // 處理單擊事件
             cardInner.addEventListener('click', function(e) {
-                // 如果目前正在編輯狀態，不允許單擊翻面
                 if (wrapper.classList.contains('editing')) return;
-
-                // 使用 Timer 區隔單擊與雙擊
                 if (clickTimer !== null) return; 
 
                 clickTimer = setTimeout(() => {
@@ -303,28 +317,41 @@
                 }, 250); // 250毫秒內沒點第二下，判定為單擊
             });
 
+            // 處理雙擊事件
             cardInner.addEventListener('dblclick', function(e) {
-                // 取消單擊的定時器
                 clearTimeout(clickTimer);
                 clickTimer = null;
 
-                // 只有在「背面」且是「作用中卡片」才能觸發雙擊編輯
-                if (wrapper.classList.contains('active') && wrapper.classList.contains('flipped')) {
+                // 必須是目前作用中的卡片才可以操作
+                if (!wrapper.classList.contains('active')) return;
+
+                if (!wrapper.classList.contains('flipped')) {
+                    // 1. 如果是在「正面」雙擊：問你要不要改更換照片
+                    const confirmChange = confirm("要更改這本書的封面照片嗎？");
+                    if (confirmChange) {
+                        const imgUrl = prompt("請貼上想要替換的網路圖片網址 (URL)：");
+                        if (imgUrl && imgUrl.trim() !== "") {
+                            cardFront.style.backgroundImage = `url('${imgUrl.trim()}')`;
+                            cardFront.classList.add('has-img');
+                        }
+                    }
+                } else {
+                    // 2. 如果是在「背面」雙擊：進入文字編輯狀態
                     wrapper.classList.add('editing');
                     textarea.removeAttribute('readonly');
                     textarea.focus();
-                    hint.textContent = "正在編輯... 點擊空白處完成";
+                    hint.textContent = "正在編輯備忘... 點擊空白處完成";
                 }
             });
 
-            // 當 textarea 失去焦點（點擊外面）時，恢復唯讀與單擊翻面功能
+            // 背面輸入框失去焦點時
             textarea.addEventListener('blur', function() {
                 wrapper.classList.remove('editing');
                 textarea.setAttribute('readonly', true);
-                hint.textContent = "單擊翻面 / 背面雙擊打字";
+                hint.textContent = "單擊翻面 / 正面雙擊換圖 / 背面雙擊打字";
             });
 
-            // 更新投影片
+            // 切換至最新建立的卡片
             currentIndex = document.querySelectorAll('.card-wrapper').length - 1;
             updateSlider();
         }
@@ -335,12 +362,11 @@
             wrappers.forEach((wrapper, index) => {
                 wrapper.classList.remove('active', 'prev', 'next', 'flipped', 'editing');
                 
-                // 重置所有 textarea 為唯讀
                 const textarea = wrapper.querySelector('textarea');
                 if(textarea) textarea.setAttribute('readonly', true);
                 
                 const hint = wrapper.querySelector('.action-hint');
-                if(hint) hint.textContent = "單擊翻面 / 背面雙擊打字";
+                if(hint) hint.textContent = "單擊翻面 / 正面雙擊換圖 / 背面雙擊打字";
 
                 wrapper.onclick = null;
 
