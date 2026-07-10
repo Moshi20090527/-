@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 翻轉書本卡片</title>
+    <title>3D 翻轉書本卡片（雙擊打字版）</title>
     <style>
         :root {
             --card-width: 260px;
@@ -34,10 +34,10 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            perspective: 1000px; /* 3D 視角 */
+            perspective: 1000px;
         }
 
-        /* 卡片包裝盒（含書名） */
+        /* 卡片包裝盒 */
         .card-wrapper {
             position: absolute;
             width: var(--card-width);
@@ -50,7 +50,6 @@
             transform: translateX(100%) scale(0.8) rotateY(-30deg);
         }
 
-        /* 多卡片狀態控制 */
         .card-wrapper.active {
             opacity: 1;
             pointer-events: auto;
@@ -83,6 +82,7 @@
             transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
             border-radius: 15px;
             box-shadow: var(--primary-shadow);
+            cursor: pointer;
         }
 
         /* 點擊翻面效果 */
@@ -95,7 +95,7 @@
             position: absolute;
             width: 100%;
             height: 100%;
-            backface-visibility: hidden; /* 隱藏背面 */
+            backface-visibility: hidden;
             border-radius: 15px;
             overflow: hidden;
             display: flex;
@@ -127,6 +127,13 @@
             transform: rotateY(180deg);
             padding: 20px;
             border: 1px solid #ddd;
+            transition: background-color 0.3s;
+        }
+
+        /* 編輯狀態下的背面發光效果 */
+        .card-wrapper.editing .card-back {
+            background-color: #f7f9fa;
+            box-shadow: inset 0 0 10px rgba(52, 152, 219, 0.3);
         }
 
         .card-back textarea {
@@ -140,6 +147,13 @@
             outline: none;
             background: transparent;
             font-family: inherit;
+            /* 預設禁止指針事件，防止單擊時干擾翻面 */
+            pointer-events: none; 
+        }
+
+        /* 當卡片處於編輯狀態時，允許輸入框接收指針事件 */
+        .card-wrapper.editing .card-back textarea {
+            pointer-events: auto;
         }
 
         /* 下方書名模塊 */
@@ -168,7 +182,7 @@
             border-bottom-color: #3498db;
         }
 
-        /* 翻轉與導覽按鈕提示 */
+        /* 提示文字 */
         .action-hint {
             position: absolute;
             bottom: -35px;
@@ -178,6 +192,7 @@
             padding: 2px 10px;
             border-radius: 10px;
             pointer-events: none;
+            transition: opacity 0.3s;
         }
 
         /* 新增按鈕 (+) */
@@ -204,11 +219,7 @@
             background-color: #27ae60;
         }
 
-        .add-btn:active {
-            transform: scale(0.95);
-        }
-
-        /* 左右切換箭頭（可點擊空白處或直接點隔壁卡片，這裡加上輔助箭頭） */
+        /* 左右切換箭頭 */
         .nav-btn {
             position: absolute;
             top: 50%;
@@ -239,83 +250,118 @@
     <button class="add-btn" id="addBtn" onclick="createNewCard()">+</button>
 
     <script>
-        let cardsData = []; // 儲存卡片資料
         let currentIndex = 0;
         const sliderContainer = document.getElementById('sliderContainer');
 
-        // 初始化：預先建立第一張卡片
         window.onload = function() {
-            createNewCard("我的第一本書", "在這裡輸入這本書的筆記或心得...");
+            createNewCard("我的第一本書", "點擊兩下此處開始打字輸入...");
         };
 
-        // 建立新卡片
         function createNewCard(title = "", content = "") {
-            const cardId = Date.now(); // 唯一ID
-            
-            // 建立 DOM 結構
+            const cardId = Date.now();
             const wrapper = document.createElement('div');
             wrapper.className = 'card-wrapper';
             wrapper.dataset.id = cardId;
 
             wrapper.innerHTML = `
-                <div class="card-inner" onclick="flipCard(this, event)">
+                <div class="card-inner" id="inner-${cardId}">
                     <div class="card-front">
                         <div class="cover-placeholder">📖<br><br>BOOK COVER</div>
                     </div>
                     <div class="card-back">
-                        <textarea placeholder="點擊輸入書籍備忘/內容..." onclick="event.stopPropagation()">${content}</textarea>
+                        <textarea placeholder="請輸入書籍內容..." readonly>${content}</textarea>
                     </div>
                 </div>
                 <div class="book-title-container">
                     <input type="text" class="book-title-input" placeholder="請輸入書名" value="${title}" onclick="event.stopPropagation()">
                 </div>
-                <div class="action-hint">點擊卡片翻面</div>
+                <div class="action-hint" id="hint-${cardId}">單擊翻面 / 背面雙擊打字</div>
             `;
 
             // 將新卡片插入到箭頭按鈕之前
             sliderContainer.insertBefore(wrapper, sliderContainer.querySelector('.prev-btn'));
             
-            // 切換到最新建立的這張卡片
+            // 綁定點擊與雙擊事件
+            const cardInner = wrapper.querySelector('.card-inner');
+            const textarea = wrapper.querySelector('textarea');
+            const hint = wrapper.querySelector('.action-hint');
+            let clickTimer = null;
+
+            cardInner.addEventListener('click', function(e) {
+                // 如果目前正在編輯狀態，不允許單擊翻面
+                if (wrapper.classList.contains('editing')) return;
+
+                // 使用 Timer 區隔單擊與雙擊
+                if (clickTimer !== null) return; 
+
+                clickTimer = setTimeout(() => {
+                    // 執行單擊：翻面
+                    if (wrapper.classList.contains('active')) {
+                        wrapper.classList.toggle('flipped');
+                    }
+                    clickTimer = null;
+                }, 250); // 250毫秒內沒點第二下，判定為單擊
+            });
+
+            cardInner.addEventListener('dblclick', function(e) {
+                // 取消單擊的定時器
+                clearTimeout(clickTimer);
+                clickTimer = null;
+
+                // 只有在「背面」且是「作用中卡片」才能觸發雙擊編輯
+                if (wrapper.classList.contains('active') && wrapper.classList.contains('flipped')) {
+                    wrapper.classList.add('editing');
+                    textarea.removeAttribute('readonly');
+                    textarea.focus();
+                    hint.textContent = "正在編輯... 點擊空白處完成";
+                }
+            });
+
+            // 當 textarea 失去焦點（點擊外面）時，恢復唯讀與單擊翻面功能
+            textarea.addEventListener('blur', function() {
+                wrapper.classList.remove('editing');
+                textarea.setAttribute('readonly', true);
+                hint.textContent = "單擊翻面 / 背面雙擊打字";
+            });
+
+            // 更新投影片
             currentIndex = document.querySelectorAll('.card-wrapper').length - 1;
             updateSlider();
         }
 
-        // 更新滑動卡片的定位與顯示狀態
         function updateSlider() {
             const wrappers = document.querySelectorAll('.card-wrapper');
             
             wrappers.forEach((wrapper, index) => {
-                // 移除所有狀態標籤
-                wrapper.classList.remove('active', 'prev', 'next');
+                wrapper.classList.remove('active', 'prev', 'next', 'flipped', 'editing');
                 
-                // 移除翻轉狀態（切換時自動翻回正面）
-                wrapper.classList.remove('flipped');
+                // 重置所有 textarea 為唯讀
+                const textarea = wrapper.querySelector('textarea');
+                if(textarea) textarea.setAttribute('readonly', true);
+                
+                const hint = wrapper.querySelector('.action-hint');
+                if(hint) hint.textContent = "單擊翻面 / 背面雙擊打字";
 
-                // 移除原本的點擊事件避免重疊
                 wrapper.onclick = null;
 
                 if (index === currentIndex) {
                     wrapper.classList.add('active');
                 } else if (index === currentIndex - 1) {
                     wrapper.classList.add('prev');
-                    // 點擊左邊露出的一角可以切換過去
                     wrapper.onclick = () => moveSlide(-1);
                 } else if (index === currentIndex + 1) {
                     wrapper.classList.add('next');
-                    // 點擊右邊露出的一角可以切換過去
                     wrapper.onclick = () => moveSlide(1);
                 }
             });
         }
 
-        // 左右切換控制 (n 為 1 或 -1)
         function moveSlide(n) {
             const wrappers = document.querySelectorAll('.card-wrapper');
             if (wrappers.length === 0) return;
 
             currentIndex += n;
 
-            // 循環邊界處理
             if (currentIndex >= wrappers.length) {
                 currentIndex = 0;
             } else if (currentIndex < 0) {
@@ -323,15 +369,6 @@
             }
 
             updateSlider();
-        }
-
-        // 點擊卡片翻面 (排除內建文字輸入框與按鈕的點擊干擾)
-        function flipCard(innerElement, event) {
-            const wrapper = innerElement.closest('.card-wrapper');
-            // 只有當前主要卡片才可以翻面
-            if (wrapper.classList.contains('active')) {
-                wrapper.classList.toggle('flipped');
-            }
         }
     </script>
 </body>
